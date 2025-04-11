@@ -1,5 +1,3 @@
-# This file is to store the CNN model for wind fault prediction so it can be easily imported into jupyter notebooks for experimentation
-
 import os
 import torch
 import torch.nn as nn
@@ -50,82 +48,132 @@ class WindFaultDataset(Dataset):
     def __getitem__(self, idx):
         return torch.tensor(self.data[idx], dtype=torch.float32), torch.tensor(self.labels[idx], dtype=torch.long)
 
-def prepare_datasets(csv_path, label_column, window_size=100, overlap_size=50, test_size=0.2, random_state=42):
-    """
-    Prepare train and test datasets from a single CSV file.
-    
-    Args:
-        csv_path: Path to the CSV file
-        label_column: Name of the column containing labels
-        window_size: Size of each window
-        overlap_size: Overlap between consecutive windows
-        test_size: Proportion of data to use for testing
-        random_state: Random seed for reproducibility
-        
-    Returns:
-        train_dataset, test_dataset: WindFaultDataset objects for training and testing
-    """
-    # Load the data
+def prepare_datasets(csv_path, label_column, window_size=100, overlap_size=50, 
+                     test_size=0.2, val_size=0.2, random_state=42):
     df = pd.read_csv(csv_path)
-    
-    # Separate features and labels
     features = df.drop(label_column, axis=1).values
     labels = df[label_column].values
+
+    # Split into train+val and test
+    X_train_val, X_test, y_train_val, y_test = train_test_split(
+        features, labels, test_size=test_size, random_state=random_state, stratify=labels)
     
-    # Split into train and test sets (stratified by label)
-    X_train, X_test, y_train, y_test = train_test_split(
-        features, labels, 
-        test_size=test_size, 
-        random_state=random_state,
-        stratify=labels
-    )
+    # Split train+val into train and val
+    X_train, X_val, y_train, y_val = train_test_split(
+        X_train_val, y_train_val, test_size=val_size, random_state=random_state, stratify=y_train_val)
     
     # Create datasets
     train_dataset = WindFaultDataset(X_train, y_train, window_size, overlap_size)
+    val_dataset = WindFaultDataset(X_val, y_val, window_size, overlap_size)
     test_dataset = WindFaultDataset(X_test, y_test, window_size, overlap_size)
     
-    return train_dataset, test_dataset
+    return train_dataset, val_dataset, test_dataset
+
+
 
 class WindFaultCNN(nn.Module):
-    def __init__(self, input_channels, num_classes, window_size):
-        super(WindFaultCNN, self).__init__()
 
-        self.conv1 = nn.Conv1d(in_channels=input_channels, out_channels=16, kernel_size=5, stride=1, padding=2)
+    def __init__(self, input_channels, num_classes, window_size):
+
+        super(WindFaultCNN, self).__init__()
+        # Dynamic kernel sizing
+        kernel_size = min(3, window_size)
+        self.conv1 = nn.Conv1d(input_channels, 16, kernel_size=kernel_size, padding='same')
         self.relu = nn.ReLU()
-        self.conv2 = nn.Conv1d(16, 32, kernel_size=5, stride=1, padding=2)
-        self.pool = nn.MaxPool1d(kernel_size=2, stride=2)
-        self.fc1 = nn.Linear(32 * (window_size // 2 // 2), 64)
+        # Adaptive pooling instead of fixed pooling
+        self.pool = nn.AdaptiveMaxPool1d(output_size=window_size//2)
+        # Second convolution with dynamic kernel
+        self.conv2 = nn.Conv1d(16, 32, kernel_size=kernel_size, padding='same')
+        # Calculate size after convolutions and pooling
+        self.fc1_input_size = 32 * (window_size // 2)
+        # Fully connected layers
+        self.fc1 = nn.Linear(self.fc1_input_size, 64)
         self.fc2 = nn.Linear(64, num_classes)
         self.softmax = nn.Softmax(dim=1)
-
     def forward(self, x):
-        x = x.permute(0, 2, 1)  # Change shape to (batch, features, time)
+        x = x.permute(0, 2, 1)
         x = self.pool(self.relu(self.conv1(x)))
         x = self.pool(self.relu(self.conv2(x)))
-        x = x.view(x.shape[0], -1)  # Flatten
+        x = x.view(x.size(0), -1)
         x = self.relu(self.fc1(x))
         x = self.fc2(x)
         return self.softmax(x)
     
-def train_model(model, train_loader, num_epochs, lr):
-    criterion = nn.CrossEntropyLoss()
-    optimizer = optim.Adam(model.parameters(), lr=lr)
+def train_model(model, train_loader, val_loader, num_epochs, optimizer, class_weights, device='cpu'):
+    model.to(device)
+    criterion = nn.CrossEntropyLoss(weight=class_weights.to(device))
+    
+    # Track losses
+    train_losses = []
+    val_losses = []
     
     for epoch in range(num_epochs):
+        # Training phase
         model.train()
-        train_loss = 0.0
+        epoch_train_loss = 0.0
         for inputs, labels in train_loader:
+            inputs, labels = inputs.to(device), labels.to(device)
             optimizer.zero_grad()
             outputs = model(inputs)
             loss = criterion(outputs, labels)
             loss.backward()
             optimizer.step()
-            train_loss += loss.item()
-
-        print(f"Epoch {epoch+1}, Loss: {train_loss/len(train_loader)}")
-    print("Training complete.")
+            epoch_train_loss += loss.item()
         
-def evaluate_model(model, test_loader, criterion, num_classes):
+        # Calculate average training loss
+        avg_train_loss = epoch_train_loss / len(train_loader)
+        train_losses.append(avg_train_loss)
+        
+        # Validation phase
+        model.eval()
+        epoch_val_loss = 0.0
+        with torch.no_grad():
+            for inputs, labels in val_loader:
+                inputs, labels = inputs.to(device), labels.to(device)
+                outputs = model(inputs)
+                loss = criterion(outputs, labels)
+                epoch_val_loss += loss.item()
+        
+        # Calculate average validation loss
+        avg_val_loss = epoch_val_loss / len(val_loader)
+        val_losses.append(avg_val_loss)
+        
+        print(f"Epoch {epoch+1}/{num_epochs} | Train Loss: {avg_train_loss:.4f} | Val Loss: {avg_val_loss:.4f}")
+
+    # Plot loss curves
+    plt.figure(figsize=(10, 5))
+    plt.plot(train_losses, label='Training Loss')
+    plt.plot(val_losses, label='Validation Loss')
+    plt.xlabel('Epochs')
+    plt.ylabel('Loss')
+    plt.title('Training and Validation Loss Curves')
+    plt.legend()
+    plt.show()
+    
+    print("Training complete.")
+    
+def validate_model(model, val_loader, class_weights, device='cpu'):
+    model.eval()
+    criterion = nn.CrossEntropyLoss(weight=class_weights.to(device))
+    total_loss = 0.0
+    all_preds = []
+    all_labels = []
+
+    with torch.no_grad():
+        for inputs, labels in val_loader:
+            inputs, labels = inputs.to(device), labels.to(device)
+            outputs = model(inputs)
+            loss = criterion(outputs, labels)
+            total_loss += loss.item()
+            
+            _, preds = torch.max(outputs, 1)
+            all_preds.extend(preds.cpu().numpy())
+            all_labels.extend(labels.cpu().numpy())
+
+    accuracy = accuracy_score(all_labels, all_preds)
+    return accuracy    
+        
+def test_model(model, test_loader, criterion, num_classes):
     model.eval()  # Set model to evaluation mode
     total_loss = 0.0
     all_preds = []
