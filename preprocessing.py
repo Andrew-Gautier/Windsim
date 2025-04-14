@@ -4,7 +4,6 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import os
 
-
 def add_noise_to_csv_files(input_dir, output_subdir, noise_level=0.02):
     """
     Adds noise to data from CSV files in a directory and saves them as new CSV files in a subfolder.
@@ -32,3 +31,5 @@ def add_noise_to_csv_files(input_dir, output_subdir, noise_level=0.02):
             output_file_path = os.path.join(output_dir, f"noisy-{file_name}")
             df_noisy.to_csv(output_file_path, index=False)
             print(f"Saved noisy data to {output_file_path}")
+
+            
