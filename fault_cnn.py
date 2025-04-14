@@ -84,10 +84,7 @@ class WindFaultCNN(nn.Module):
         self.pool = nn.AdaptiveMaxPool1d(output_size=window_size//2)
         # Second convolution with dynamic kernel
         self.conv2 = nn.Conv1d(16, 32, kernel_size=kernel_size, padding='same')
-        # LSTM layer
-        # Made input size since I think the 2nd conv layer outputs 32.
-        # Got 64 from an example so I went w/ it? Don't fully understand this param. 
-        # 
+        # LSTM layer 
         self.lstm = nn.LSTM(input_size=32, hidden_size=64, num_layers=1, batch_first=True) 
         # Calculate size after convolutions and pooling
         self.fc1_input_size = 32 * (window_size // 2)
@@ -100,7 +97,7 @@ class WindFaultCNN(nn.Module):
         x = self.pool(self.relu(self.conv1(x)))
         x = self.pool(self.relu(self.conv2(x)))
         x = x.permute(0, 2, 1)
-        x, _ = self.lstm(x)
+        x, _ = self.lstm(x) # Ignore LSTM's hidden layer output
         x = x.view(x.size(0), -1)
         x = self.relu(self.fc1(x))
         x = self.fc2(x)
