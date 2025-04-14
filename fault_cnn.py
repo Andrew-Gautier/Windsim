@@ -228,3 +228,11 @@ def test_model(model, test_loader, criterion, num_classes):
     plt.show()
 
     return accuracy, class_report, conf_matrix, roc_auc
+
+    # Suggestions for future work: 
+    # 1.  Adding batch normalization layers after each convolution can help stabilize and accelerate training by normalizing the feature maps. 
+    # 2.  To avoid overfitting, especially in fully connected layers, adding dropout (e.g., with a 20-50% rate) could be helpful. 
+    # 3.  Strided convolutions instead of pooling could allow the model to better downsample.
+    # 4.  Deeper architecture or simple residual connections may help the model extract more complex features.
+    # 5.  More importantly, data normalization is one of the most critical factors that can affect the training procedure. 
+    # 6.  Instead of a constant learning rate, a learning rate scheduler (like ReduceLROnPlateau) can be used.
