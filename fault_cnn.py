@@ -84,6 +84,8 @@ class WindFaultCNN(nn.Module):
         self.pool = nn.AdaptiveMaxPool1d(output_size=window_size//2)
         # Second convolution with dynamic kernel
         self.conv2 = nn.Conv1d(16, 32, kernel_size=kernel_size, padding='same')
+        # LSTM 
+        self.lstm = nn.LSTM(input_size=32, hidden_size=64, num_layers=1, batch_first=True)
         # Calculate size after convolutions and pooling
         self.fc1_input_size = 32 * (window_size // 2)
         # Fully connected layers
