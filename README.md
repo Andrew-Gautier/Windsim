@@ -1,4 +1,41 @@
+# Grid Fault Detection using CNN
 
+This project implements a Convolutional Neural Network (CNN) for fault detection in energy grid using time-series sensor data. The model processes rolling windows of normalized sensor data to classify different fault conditions. There were four faults considered here: 3-phase, 2-phase, 2-phase-earth, and 1phase. For a more detailed explanation of the project see the final report pdf. 
+
+## Key Features
+
+- **Data Processing**: 
+  - Rolling window generation with configurable window size and overlap
+  - Min-Max normalization of sensor data
+  - Stratified train/validation/test splits
+
+- **CNN Architecture**:
+  - 1D convolutional layers with dynamic kernel sizing
+  - Adaptive max pooling
+  - Two fully connected layers with ReLU activation
+  - Softmax output for multi-class classification
+
+- **Training & Evaluation**:
+  - Cross-entropy loss with class weighting
+  - Training progress visualization
+  - Comprehensive evaluation metrics:
+    - Accuracy
+    - Classification report
+    - Confusion matrix
+    - ROC-AUC curves
+
+## Requirements
+
+- Python 3.7+
+- PyTorch
+- scikit-learn
+- pandas
+- numpy
+- matplotlib
+- seaborn
+- torchviz (for model visualization)
+
+## Installation
 
 All requirements to run this code exist in requirements.txt
 
